@@ -1,5 +1,8 @@
 # Sistema de Microservicios E-commerce
 
+**Autores:** Matías Lugmaña, Jossue Toscano  
+**NRC:** 27885
+
 Una arquitectura de microservicios orientada por eventos para una plataforma de comercio electrónico utilizando Node.js y RabbitMQ. El sistema garantiza consistencia de datos entre pedidos e inventario mediante comunicación asíncrona de eventos con manejo de transacciones concurrentes.
 
 ## Descripción General de la Arquitectura
