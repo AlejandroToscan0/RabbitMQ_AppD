@@ -1,174 +1,264 @@
+# Sistema de Microservicios E-commerce
 
-# 🛒 Sistema de Microservicios E-commerce (Event-Driven)
+Una arquitectura de microservicios orientada por eventos para una plataforma de comercio electrónico utilizando Node.js y RabbitMQ. El sistema garantiza consistencia de datos entre pedidos e inventario mediante comunicación asíncrona de eventos con manejo de transacciones concurrentes.
 
-Este proyecto implementa una arquitectura de microservicios para un sistema de comercio electrónico, utilizando un enfoque orientado a eventos asíncronos. El sistema garantiza la consistencia de datos entre pedidos e inventario, maneja concurrencia y sigue principios de diseño de software robusto.
+## Descripción General de la Arquitectura
 
-## 📋 Tecnologías y Arquitectura
+### Stack Tecnológico
 
-* **Lenguaje:** Node.js (v18)
-* **Contenedorización:** Docker & Docker Compose
-* **Base de Datos:** PostgreSQL (con extensión `pgcrypto` para UUIDs)
-* **Mensajería:** RabbitMQ (Intercambio de eventos asíncronos)
-* **Patrones de Diseño:**
-* **SOLID:** Separación de responsabilidades.
-* **Repository Pattern:** Abstracción de la capa de datos.
-* **Dependency Injection:** Desacoplamiento de módulos.
-* **Event-Driven:** Comunicación no bloqueante entre servicios.
+- **Runtime:** Node.js v18
+- **Base de Datos:** PostgreSQL 15 (con soporte UUID)
+- **Message Broker:** RabbitMQ 3 (AMQP)
+- **Contenedorización:** Docker & Docker Compose
+- **Patrones de Diseño:** Principios SOLID, Patrón Repository, Inyección de Dependencias, Arquitectura Orientada por Eventos
 
+### Componentes del Sistema
 
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Clientes HTTP                            │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                    ┌──────▼──────┐
+                    │Servicio de  │ (Puerto 8080)
+                    │  Pedidos    │
+                    │  - Crear    │
+                    │  - Consultar│
+                    └──────┬──────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+    (Publicar)        (Consumir)         (Consumir)
+        │                  │                  │
+   order.created   stock.reserved    stock.rejected
+        │                  │                  │
+        ▼                  │                  │
+    ┌───────────────────────────────────────┐
+    │    RabbitMQ Message Broker            │
+    └─────────────────┬─────────────────────┘
+                      │
+            ┌─────────┼─────────┐
+            │                   │
+        (Consumir)         (Publicar)
+            │                   │
+   order.created       stock.reserved
+                       stock.rejected
+            │                   │
+            ▼                   ▼
+    ┌─────────────────────────────────────┐
+    │  Servicio de Inventario             │
+    │  - Verificar disponibilidad stock   │
+    │  - Reservar/Rechazar con DB lock   │
+    │  - Emitir eventos                   │
+    └────────────────┬────────────────────┘
+                     │
+            ┌────────▼────────┐
+            │   PostgreSQL    │
+            │  - Pedidos      │
+            │  - Items Pedido │
+            │  - Stock Prod.  │
+            └─────────────────┘
+```
 
----
+## Flujo de Datos
 
-## 🚀 Instrucciones de Instalación y Ejecución
+1. **Solicitud del Cliente:** HTTP POST a `/api/v1/orders` con detalles del pedido
+2. **Servicio de Pedidos:** 
+   - Valida y crea pedido con estado `PENDING`
+   - Publica evento `order.created` en RabbitMQ
+3. **Servicio de Inventario:**
+   - Consume evento `order.created`
+   - Ejecuta transacción atómica con bloqueo de fila en BD (`FOR UPDATE`)
+   - Valida disponibilidad de stock para todos los items
+4. **Punto de Decisión:**
+   - **Stock Disponible:** Decrementa inventario, publica `stock.reserved`
+   - **Stock No Disponible:** Publica `stock.rejected` con razón
+5. **Servicio de Pedidos:**
+   - Consume `stock.reserved` o `stock.rejected`
+   - Actualiza estado del pedido a `CONFIRMED` o `CANCELLED`
 
-### Prerrequisitos
+## Primeros Pasos
 
-* Tener instalado **Docker Desktop** (o Docker Engine + Docker Compose).
-* (Opcional) Postman para realizar las pruebas de API.
+### Requisitos Previos
 
-### Paso 1: Levantar el Sistema
+- Docker Desktop o Docker Engine + Docker Compose
+- Acceso a terminal/shell
 
-Abra una terminal en la raíz del proyecto y ejecute el siguiente comando. Esto construirá las imágenes, creará la red interna e inicializará la base de datos.
+### Instalación
+
+Clona y navega al proyecto:
+
+```bash
+git clone <repository-url>
+cd RabbitMQ_AppD
+```
+
+Inicia todos los servicios:
 
 ```bash
 docker-compose -f infrastructure/docker-compose.yml up --build
-
 ```
 
-Espere hasta ver los mensajes de conexión exitosa en la consola:
+Espera el mensaje de confirmación: `[RabbitMQ] Conectado exitosamente`
 
-> `✅ [RabbitMQ] Conectado exitosamente`
+### Obtener IDs de Productos
 
----
-
-## ⚠️ Paso 2: Obtener UUIDs de Productos (IMPORTANTE)
-
-El sistema genera **UUIDs aleatorios** automáticamente al iniciar la base de datos para simular un entorno real. Para probar el sistema, **primero debe consultar qué IDs se generaron**.
-
-Mantenga la terminal de logs abierta, abra una **nueva terminal** y ejecute:
+El sistema genera automáticamente dos productos con UUIDs aleatorios en la primera ejecución. Consúltalos:
 
 ```bash
-docker exec -it postgres_db psql -U admin -d ecommerce_db -c "SELECT * FROM products_stock;"
-
+docker exec -it postgres_db psql -U admin -d ecommerce_db \
+  -c "SELECT product_id, stock FROM products_stock;"
 ```
 
-Verá una tabla similar a esta. **Copie los IDs que aparezcan en su pantalla:**
+Recibirás:
 
-| product_id (UUID) | stock | Descripción |
-| --- | --- | --- |
-| `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa` | **100** | **Producto A** (Use este para prueba exitosa) |
-| `bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb` | **0** | **Producto B** (Use este para prueba de fallo) |
+| product_id | stock | Uso |
+|-----------|-------|-------|
+| `uuid-1` | 100 | Pruebas de compra exitosa |
+| `uuid-2` | 0 | Pruebas de escenario fallido |
 
----
+## Referencia de API
 
-## 🧪 Guía de Pruebas (Postman / cURL)
+### Servicio de Pedidos (Puerto 8080)
 
-### Escenario A: Compra Exitosa (Happy Path)
+**Crear Pedido**
+```http
+POST /api/v1/orders
+Content-Type: application/json
 
-Simula la compra de un producto con stock suficiente.
-
-**Petición:**
-
-* **Método:** `POST`
-* **URL:** `http://localhost:8080/api/v1/orders`
-* **Body (JSON):** *(Reemplace `UUID_CON_STOCK` por el ID obtenido en el Paso 2)*
-
-```json
 {
   "customerId": "9f7a1e2a-31f6-4a53-b0d2-6f4f1c7a3b2e",
   "items": [
     {
-      "productId": "PEGAR_AQUI_UUID_CON_STOCK", 
+      "productId": "uuid-producto",
       "quantity": 2
     }
   ],
-  "shippingAddress": { "city": "Quito", "street": "Av. Amazonas" }
+  "shippingAddress": {
+    "city": "Quito",
+    "street": "Av. Amazonas"
+  }
 }
-
 ```
 
-**Resultado Esperado:**
-
-1. Recibirá un `orderId` con estado inicial `PENDING`.
-2. Al consultar el estado (`GET http://localhost:8080/api/v1/orders/{orderId}`), el estado cambiará a **`CONFIRMED`**.
-3. Al consultar el stock (`GET http://localhost:8081/api/v1/products/{productId}/stock`), el `availableStock` habrá bajado de **100 a 98**.
-
----
-
-### Escenario B: Compra Fallida (Sin Stock)
-
-Simula la compra de un producto sin inventario.
-
-**Petición:**
-
-* **Método:** `POST`
-* **URL:** `http://localhost:8080/api/v1/orders`
-* **Body (JSON):** *(Reemplace `UUID_SIN_STOCK` por el ID con 0 stock)*
-
+Respuesta (HTTP 201):
 ```json
 {
-  "customerId": "9f7a1e2a-31f6-4a53-b0d2-6f4f1c7a3b2e",
-  "items": [
-    {
-      "productId": "PEGAR_AQUI_UUID_SIN_STOCK", 
-      "quantity": 1
-    }
-  ],
-  "shippingAddress": { "city": "Guayaquil" }
+  "orderId": "uuid-generado",
+  "status": "PENDING",
+  "message": "Pedido recibido. Verificación de inventario en progreso.",
+  "createdAt": "2026-01-21T22:16:00.990Z"
 }
-
 ```
 
-**Resultado Esperado:**
+**Consultar Estado del Pedido**
+```http
+GET /api/v1/orders/{orderId}
+```
 
-1. Recibirá un `orderId`.
-2. Al consultar el estado del pedido, verá:
-* `status`: **`CANCELLED`**
-* `reason`: *"Insufficient stock for product..."*
+Respuesta (HTTP 200):
+```json
+{
+  "orderId": "uuid",
+  "customerId": "uuid",
+  "status": "CONFIRMED",
+  "items": [...],
+  "reason": null
+}
+```
 
+### Servicio de Inventario (Puerto 8081)
 
+**Verificar Stock**
+```http
+GET /api/v1/products/{productId}/stock
+```
 
----
+Respuesta (HTTP 200):
+```json
+{
+  "productId": "uuid",
+  "availableStock": 98,
+  "reservedStock": 0,
+  "updatedAt": "2026-01-21T22:16:01.028Z"
+}
+```
 
-## 📊 Arquitectura del Flujo de Datos
+## Escenarios de Prueba
 
-El sistema sigue el siguiente flujo asíncrono:
+### Escenario 1: Compra Exitosa
 
-1. **Order Service** recibe la petición HTTP y guarda la orden en estado `PENDING`.
-2. Publica el evento `order.created` en **RabbitMQ**.
-3. **Inventory Service** consume el evento.
-4. Realiza una transacción en Base de Datos con bloqueo (`FOR UPDATE`) para verificar y descontar stock de forma segura.
-5. Publica el resultado (`stock.reserved` o `stock.rejected`) en RabbitMQ.
-6. **Order Service** consume el resultado y actualiza el estado final de la orden (`CONFIRMED` o `CANCELLED`).
+Usa UUID de producto con stock (100 unidades). Flujo esperado:
 
-### Evidencia de Configuración (RabbitMQ Management)
+1. POST a `/api/v1/orders` → Retorna `orderId` con estado `PENDING`
+2. GET `/api/v1/orders/{orderId}` → Estado cambia a `CONFIRMED`
+3. GET `/api/v1/products/{productId}/stock` → Stock disponible decrece a 98
 
-Puede visualizar los Exchanges y Colas accediendo a:
+### Escenario 2: Stock Insuficiente
 
-* **URL:** [http://localhost:15672](https://www.google.com/search?q=http://localhost:15672)
-* **User:** `guest`
-* **Pass:** `guest`
+Usa UUID de producto sin stock (0 unidades). Flujo esperado:
 
----
+1. POST a `/api/v1/orders` → Retorna `orderId` con estado `PENDING`
+2. GET `/api/v1/orders/{orderId}` → Estado cambia a `CANCELLED` con razón
 
-## 🛠️ Comandos de Mantenimiento
+## Documentación de Servicios
 
-Si desea reiniciar la base de datos desde cero (borrar datos y generar nuevos UUIDs):
+Para documentación técnica detallada, consulta:
+
+- [Servicio de Pedidos](./order-service/README.md) - Manejo de solicitudes y coordinación de eventos
+- [Servicio de Inventario](./inventory-service/README.md) - Gestión de stock y manejo de concurrencia
+
+## Monitoreo y Administración
+
+**Consola de Administración RabbitMQ**
+- URL: `http://localhost:15672`
+- Credenciales: `guest` / `guest`
+- Visualiza exchanges, colas y flujo de eventos
+
+**Acceso a Base de Datos**
+```bash
+docker exec -it postgres_db psql -U admin -d ecommerce_db
+```
+
+## Mantenimiento
+
+Reiniciar base de datos y regenerar UUIDs de productos:
 
 ```bash
-# Detiene los servicios y borra los volúmenes de datos persistentes
 docker-compose -f infrastructure/docker-compose.yml down -v
-
-# Reconstruye y levanta
 docker-compose -f infrastructure/docker-compose.yml up --build
-
 ```
 
-##  Evidencia Funcionamiento 
-![alt text](image.png)
-![alt text](image-1.png)
-![alt text](image-2.png)
-![alt text](image-3.png)
-![alt text](image-4.png)
-![alt text](image-5.png)
-![alt text](image-6.png)
+Detener servicios:
+
+```bash
+docker-compose -f infrastructure/docker-compose.yml down
+```
+
+## Estructura del Proyecto
+
+```
+RabbitMQ_AppD/
+├── infrastructure/
+│   ├── docker-compose.yml       # Orquestación de servicios
+│   └── init.sql                 # Inicialización de BD
+├── order-service/               # Microservicio de gestión de pedidos
+│   ├── src/
+│   │   ├── server.js
+│   │   ├── controllers/
+│   │   ├── services/
+│   │   ├── domain/
+│   │   └── infrastructure/
+│   ├── Dockerfile
+│   └── package.json
+├── inventory-service/           # Microservicio de gestión de stock
+│   ├── src/
+│   │   ├── server.js
+│   │   ├── controllers/
+│   │   ├── services/
+│   │   ├── domain/
+│   │   └── infrastructure/
+│   ├── Dockerfile
+│   └── package.json
+└── README.md
+```
