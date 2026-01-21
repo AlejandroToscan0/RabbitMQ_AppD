@@ -1,0 +1,16 @@
+# .gitignore
+
+# Dependencias (Se instalan solas con npm install)
+node_modules/
+**/node_modules/
+
+# Logs y archivos de debug
+npm-debug.log
+*.log
+
+# Archivos de sistema operativo (Basura de Mac/Windows)
+.DS_Store
+Thumbs.db
+
+# Variables de entorno (Si tuvieras claves secretas, aquí irían)
+.env
