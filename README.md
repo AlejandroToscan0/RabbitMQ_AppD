@@ -265,32 +265,13 @@ RabbitMQ_AppD/
 
 ## Evidencia de Funcionamiento
 
-### Levantamiento de Servicios
-![Servicios levantados](image.png)
-
-### Consulta de Productos Generados
-![Productos en BD](image-1.png)
-
-### Creación de Pedido - Respuesta Exitosa
-![POST orden exitosa](image-2.png)
-
-### Consulta de Estado del Pedido - PENDING
-![Estado PENDING](image-3.png)
-
-### Consulta de Estado del Pedido - CONFIRMED
-![Estado CONFIRMED](image-4.png)
-
-### Verificación de Stock Después de Reserva
-![Stock actualizado](image-5.png)
-
-### Pedido con Stock Insuficiente - CANCELLED
-![Orden rechazada](image-6.png)
-
-### Monitoreo en RabbitMQ Management
-![RabbitMQ Console](image-7.png)
-
-### Estado de Contenedores Docker
-![Contenedores activos](image-8.png)
-
-### Diagrama de Flujo de Eventos
-![Flujo arquitectura](image-9.png)
+![Evidencia 1](image.png)
+![Evidencia 2](image-1.png)
+![Evidencia 3](image-2.png)
+![Evidencia 4](image-3.png)
+![Evidencia 5](image-4.png)
+![Evidencia 6](image-5.png)
+![Tabla orders en pgAdmin](image-6.png)
+![Tabla order_items en pgAdmin](image-7.png)
+![Tabla products_stock en pgAdmin](image-8.png)
+![Diagrama de flujo de eventos](image-9.png)
